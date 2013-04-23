@@ -22,16 +22,12 @@ class MiniboxingTransformer extends ClassFileTransformer {
                 protectionDomain: ProtectionDomain,
                 classfileBuffer: Array[Byte]): Array[Byte] ={
 
-    if (className.contains("Target"))
-      System.err.println("Class name: " + className)
     if (className.endsWith("_1")) {
-      System.err.println("Minibox-transforming: " + className)
+      System.err.println("  creating miniboxed class: " + className)
       transformMiniboxedClass(loader, className)
     } else {
 //      System.err.println("Normal-transforming: " + className)
-      val newBuffer = transformNormalClass(classfileBuffer)
-      newBuffer
-//      classfileBuffer
+      transformNormalClass(classfileBuffer)
     }
   }
 
@@ -50,29 +46,35 @@ class MiniboxingTransformer extends ClassFileTransformer {
         insnNodes.next match {
           case tinst: TypeInsnNode if tinst.getOpcode() == Opcodes.NEW =>
             if (tinst.desc.endsWith("_J")) {
-              System.err.println("MODIFIED: " + tinst.desc + " => " + tinst.desc.replaceAll("_J", "_1"))
               different = true
+              System.err.println("  rewired NEW: " + tinst.desc + " => " + tinst.desc.replaceAll("_J", "_1"))
               insnNodes.set(new TypeInsnNode(Opcodes.NEW, tinst.desc.replaceAll("_J", "_1")))
             }
+          case minst: MethodInsnNode =>
+            // patch up constructor call
+            if (minst.name == "<init>")
+              if (minst.owner.endsWith("_J")) {
+                different = true
+                System.err.println("  rewired <init>: " + minst.desc + " => " + minst.desc.replaceAll("_J", "_1"))
+                minst.owner = minst.owner.replaceAll("_J$", "_1")
+              }
           case _ =>
         }
       }
     }
 
-    if (different) {
-      // Debugging:
-      System.err.println("================================AFTER================================")
-      val printWriter = new PrintWriter(System.err)
-      val traceClassVisitor = new TraceClassVisitor(printWriter)
-      classNode.accept(traceClassVisitor)
-    }
+//    if (different) {
+//      // Debugging:
+//      System.err.println("================================AFTER================================")
+//      val printWriter = new PrintWriter(System.err)
+//      val traceClassVisitor = new TraceClassVisitor(printWriter)
+//      classNode.accept(traceClassVisitor)
+//    }
 
     if (different) {
       val cw = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
       classNode.accept(cw);
-      var classBytes = cw.toByteArray
-      System.err.println("DIFFERENT")
-      classBytes
+      cw.toByteArray
     } else
       classfileBuffer
   }
