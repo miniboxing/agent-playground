@@ -22,7 +22,7 @@ class MiniboxingTransformer extends ClassFileTransformer {
                 protectionDomain: ProtectionDomain,
                 classfileBuffer: Array[Byte]): Array[Byte] ={
 
-    if (className.endsWith("_1")) {
+    if (className.matches(".*_[0-9]$")) {
       System.err.println("  creating miniboxed class: " + className)
       transformMiniboxedClass(loader, className)
     } else {
@@ -37,6 +37,8 @@ class MiniboxingTransformer extends ClassFileTransformer {
     cr.accept(classNode, 0)
 
     var different = false
+    var lastTParam = 0
+    var lastNumber = 0
 
     // Patch all the methods
     val methodNodes = classNode.methods.asInstanceOf[JList[MethodNode]].asScala
@@ -47,16 +49,31 @@ class MiniboxingTransformer extends ClassFileTransformer {
           case tinst: TypeInsnNode if tinst.getOpcode() == Opcodes.NEW =>
             if (tinst.desc.endsWith("_J")) {
               different = true
-              System.err.println("  rewired NEW: " + tinst.desc + " => " + tinst.desc.replaceAll("_J", "_1"))
-              insnNodes.set(new TypeInsnNode(Opcodes.NEW, tinst.desc.replaceAll("_J", "_1")))
+              System.err.println("  rewired NEW: " + tinst.desc + " => " + tinst.desc.replaceAll("_J", "_" + lastTParam))
+              insnNodes.set(new TypeInsnNode(Opcodes.NEW, tinst.desc.replaceAll("_J", "_" + lastTParam)))
             }
           case minst: MethodInsnNode =>
             // patch up constructor call
-            if (minst.name == "<init>")
+            if (minst.name == "<init>") {
               if (minst.owner.endsWith("_J")) {
                 different = true
-                System.err.println("  rewired <init>: " + minst.desc + " => " + minst.desc.replaceAll("_J", "_1"))
-                minst.owner = minst.owner.replaceAll("_J$", "_1")
+                System.err.println("  rewired <init>: " + minst.owner + " => " + minst.owner.replaceAll("_J", "_" + lastTParam))
+                minst.owner = minst.owner.replaceAll("_J$", "_" + lastTParam)
+              }
+            } else if (minst.name == "setTParam") {
+              lastTParam = lastNumber
+            }
+          case i: IntInsnNode if i.getOpcode() == Opcodes.BIPUSH =>
+            lastNumber = i.operand
+          case i: InsnNode if (i.getOpcode() >= Opcodes.ICONST_0) && (i.getOpcode() <= Opcodes.ICONST_5) =>
+            lastNumber =
+              i.getOpcode() match {
+                case Opcodes.ICONST_0 => 0
+                case Opcodes.ICONST_1 => 1
+                case Opcodes.ICONST_2 => 2
+                case Opcodes.ICONST_3 => 3
+                case Opcodes.ICONST_4 => 4
+                case Opcodes.ICONST_5 => 5
               }
           case _ =>
         }
