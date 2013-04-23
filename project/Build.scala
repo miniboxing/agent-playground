@@ -32,10 +32,9 @@ object MiniboxingBuild extends Build {
     ),
 
     libraryDependencies ++= Seq(
-      // "org.scala-lang" % "scala-library" % scalaVer,
-      // "org.scala-lang" % "scala-reflect" % scalaVer,
-      // "org.scala-lang" % "scala-compiler" % scalaVer,
-      // "org.scala-lang" % "scala-partest" % scalaVer, 
+      "org.scala-lang" % "scala-library" % scalaVer,
+      "org.scala-lang" % "scala-reflect" % scalaVer,
+      "org.scala-lang" % "scala-compiler" % scalaVer,
       "org.scalacheck" %% "scalacheck" % "1.10.0" % "test",
       "com.novocode" % "junit-interface" % "0.10-M2" % "test"
     ),
@@ -51,6 +50,13 @@ object MiniboxingBuild extends Build {
       "org.ow2.asm" % "asm-analysis" % "4.0"
     )
   )
+ 
+  val agentSettings = Seq(
+    fork in Test := true,
+    javaOptions in Test <+= (packageBin in Compile) map { jar => "-javaagent:" + jar },
+    packageOptions in (Compile, packageBin) +=
+      Package.ManifestAttributes(("Premain-Class", "miniboxing.agent.MiniboxingAgent"))
+  )
 
   val scalaMeter = {
     val sMeter  = Seq("com.github.axel22" %% "scalameter" % "0.3")
@@ -61,6 +67,6 @@ object MiniboxingBuild extends Build {
   }
 
   lazy val _agents     = Project(id = "agents-playground",             base = file(".")) aggregate (agent, benchmarks)
-  lazy val agent       = Project(id = "agents-playground-agent",       base = file("components/runtime"), settings = defaults ++ asm)
+  lazy val agent       = Project(id = "agents-playground-agent",       base = file("components/agent"), settings = defaults ++ asm ++ agentSettings)
   lazy val benchmarks  = Project(id = "agents-playground-benchmarks",  base = file("tests/benchmarks"),   settings = defaults ++ scalaMeter) dependsOn(agent)
 }
